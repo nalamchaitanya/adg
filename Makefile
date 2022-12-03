@@ -1,6 +1,6 @@
 all: adg
 
-hw4: adg.cu
+adg: adg.cu
 	nvcc -o adg adg.cu
 
 clean:
