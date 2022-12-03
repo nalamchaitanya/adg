@@ -55,7 +55,18 @@ void parseInput(string inputFile, int &n, int &m, int *adjList, int* graph, int 
     cout << endl;
 
 }
+int* getrho(int* graph, int* adjList, int strategy, int n)
+{
+    int *rho = new int[n + 1];
+    rho[0] = -1;
+    for(int i  = 1; i <= n; i ++)
+    {
+        rho[i] = i;
+    }
+    random_shuffle(rho + 1, rho + n + 1);
+    return rho;
 
+}
 int main()
 {
     if(argc == 1)
