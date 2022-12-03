@@ -24,9 +24,9 @@ void parseInput(string inputFile, int &n, int &m, int *adjList, int* graph, int 
     adjList = new int[2*m];
     graph[0] = m;
     vector<int> g[n + 1];
+    int u,v;
     for(int i = 0; i < m; i ++)
     {
-        int u,v;
         f >> u >> v;
         g[u].push_back(v);
         g[v].push_back(u);
@@ -40,7 +40,7 @@ void parseInput(string inputFile, int &n, int &m, int *adjList, int* graph, int 
         {
             adjList[ctr++] = x;
         }
-        D = max(maxdeg, (int)g[i].size());
+        D = max(D, (int)g[i].size());
     }
     graph[n + 1] = ctr;
     for(int i = 0; i <=n ; i++)
@@ -57,6 +57,11 @@ void parseInput(string inputFile, int &n, int &m, int *adjList, int* graph, int 
 }
 int* getrho(int* graph, int* adjList, int strategy, int n)
 {
+    // this has to give the total order permutation on the vertices.
+    // based on strategy should give random order or adg order or dec-adg order
+    // Should we implement this in Device using parallel programming
+    // Maybe but later
+
     int *rho = new int[n + 1];
     rho[0] = -1;
     for(int i  = 1; i <= n; i ++)
@@ -66,7 +71,6 @@ int* getrho(int* graph, int* adjList, int strategy, int n)
     random_shuffle(rho + 1, rho + n + 1);
     return rho;
 
-}
 int main()
 {
     if(argc == 1)
@@ -74,14 +78,23 @@ int main()
         cout << "No input" << endl;
     }
     // TODO by aditya
-    int n,m, D;
+    int n, m, D;
     int *adjList; //This is the adjacency list
     int *graph;
     parseInput(argv[1], n , m, adjList, graph, D);
+
+    int* rho = getRho(graph, 1); // 1= random order or largest degree first
+    
+    dim3 gridDim((n+1023)/1024,1,1);
+    dim3 blockDim(1024,1,1);
+
+    int *d_graph, *d_rho, *d_C;
+
+    if(cudaMalloc(&d_graph,))
     
 }
 
-__device__ int getColor(int *adjList, int* graph, int* rho, int* C, int v, int D) //a is the adjacency list mapping
+__device__ int getColor(int *graph, int* adjList, int* rho, int* C, int v, int D) //a is the adjacency list mapping
 {
     bool *B = new bool[D + 1] ();
     // if(v==n) TODO make sure n+1 th entry should be the end index of the array to make sure this works.
