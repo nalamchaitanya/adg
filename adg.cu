@@ -88,15 +88,64 @@ int main()
     dim3 gridDim((n+1023)/1024,1,1);
     dim3 blockDim(1024,1,1);
 
-    int *d_graph, *d_rho, *d_C;
+    int *d_graph, *d_adjList, *d_rho, *d_C;
 
-    if(cudaMalloc(&d_graph,))
-    
+    if(cudaMalloc(&d_graph,sizeof(int)*(n+2))!=cudaSuccess)
+    {
+        cout << "Could not allocate d_graph" << endl;
+    }
+
+    if(cudaMalloc(&d_adjList, sizeof(int)*(2*m))!=cudaSuccess)
+    {
+        cout << "Could not allocate d_adjList" << endl;
+    }
+
+    if(cudaMalloc(&d_rho,sizeof(int)*n)!=cudaSuccess)
+    {
+        cout << "Could not allocate d_graph" << endl;
+    }
+
+    if(cudaMalloc(&d_C, sizeof(int)*n)!=cudaSuccess)
+    {
+        cout << "Could not allocate d_C" << endl;
+    }
+
+    if(cudaMemcpy(d_graph,graph,sizeof(int)*(n+2),cudaMemcpyHostToDevice) != cudaSuccess){
+        cout<<"Could not copy graph into d_graph"<<endl;
+    }
+
+    if(cudaMemcpy(d_adjList,adjList,sizeof(int)*(2*m),cudaMemcpyHostToDevice) != cudaSuccess){
+        cout<<"Could not copy adjList into d_adjList"<<endl;
+    }
+
+    if(cudaMemcpy(d_rho,rho,sizeof(int)*(n),cudaMemcpyHostToDevice) != cudaSuccess){
+        cout<<"Could not copy rho into d_rho"<<endl;
+    }
+
+    if(cudaMemset(&d_C, 0, sizeof(int)*n) != cudaSuccess)
+    {
+        cout << "Could not memset C" << endl;
+    }
+
+    while(notAllVerticesColored(C,n))
+    {
+        // We need not run again for all vertices
+        // Run only for uncolored vertices VERY IMPORTANT
+        jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C);
+        if(cudaMemcpy(C,d_C,sizeof(int)*n,cudaMemcpyDeviceToHost) != cudaSuccess)
+        {
+            cout << "Could not copy d_C into C" << endl;
+        }
+    }
+
+    assert(true);
+    // assert(checkValidColoring(graph, adjList, C));
+    return 0;
 }
 
-__device__ int getColor(int *graph, int* adjList, int* rho, int* C, int v, int D) //a is the adjacency list mapping
+__device__ int getColor(int* graph, int* rho, int* C, int v, int D)
 {
-    bool *B = new bool[D + 1] ();
+    bool B[D] = 0;
     // if(v==n) TODO make sure n+1 th entry should be the end index of the array to make sure this works.
     // This is very important as we do not want if statement here as this function gets used a lot of times
     for(int i = graph[v]; i < graph[v+1]; i++)
