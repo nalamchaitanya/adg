@@ -108,8 +108,9 @@ int* getRho(int* graph, int* adjList, int strategy, int n)
 
 __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D)
 {
-    bool* B = new bool[D+1]();
-    memset(B,0,sizeof(bool)*(D+1));
+    int deg = graph[v+1]-graph[v];
+    bool* B = new bool[deg+2]();
+    memset(B,0,sizeof(int)*(deg+2));
     // if(v==n) TODO make sure n+1 th entry should be the end index of the array to make sure this works.
     // This is very important as we do not want if statement here as this function gets used a lot of times
     for(int i = graph[v]; i < graph[v+1]; i++)
@@ -123,12 +124,15 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
             }
             else
             {
-                B[C[adjList[i]]] = true;
+                if(C[adjList[i]]<=deg+1)
+                {
+                    B[C[adjList[i]]] = true;
+                }
             }
         }
     }
     // printf("get color %d\n",v);
-    for(int i =1 ;i <= D; i++)
+    for(int i =1 ;i <=deg+1; i++)
     {
         if(!B[i])
         {
@@ -137,8 +141,8 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
         }
     }
     // Should not come here at all
-    assert(false);
     free(B);
+    assert(false);
     return 0;
 }
 
