@@ -77,6 +77,7 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     }
     D++;
     graph[n + 1] = ctr;
+    f.close();
     // for(int i = 0; i <2*m ; i++)
     // {
     //     cout << adjList[i] <<" ";
@@ -87,7 +88,7 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     //     cout << graph[i] <<" ";
     // }
     // cout << endl;
-
+    return;
 }
 int* getRho(int* graph, int* adjList, int strategy, int n)
 {
@@ -110,7 +111,7 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
 {
     int deg = graph[v+1]-graph[v];
     bool* B = new bool[deg+2]();
-    memset(B,0,sizeof(int)*(deg+2));
+    memset(B,0,sizeof(bool)*(deg+2));
     // if(v==n) TODO make sure n+1 th entry should be the end index of the array to make sure this works.
     // This is very important as we do not want if statement here as this function gets used a lot of times
     for(int i = graph[v]; i < graph[v+1]; i++)
