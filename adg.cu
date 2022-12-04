@@ -41,7 +41,7 @@ bool checkValidColoring(int* graph, int* adjList, int* C, int n)
     return true;
 }
 
-void parseInput(char* inputFile, int &n, int &m, int *graph, int* adjList, int &D)
+void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int &D)
 {
     // TODO aditya: malloc the graph here after finding the number of edges and length of array needed
     // Determine the number of colors D needed
@@ -71,17 +71,18 @@ void parseInput(char* inputFile, int &n, int &m, int *graph, int* adjList, int &
         }
         D = max(D, (int)g[i].size());
     }
+    D++;
     graph[n + 1] = ctr;
-    for(int i = 0; i <2*m ; i++)
-    {
-        cout << adjList[i] <<" ";
-    }
-    cout << endl;
-    for(int i = 0; i < n+2; i ++)
-    {
-        cout << graph[i] <<" ";
-    }
-    cout << endl;
+    // for(int i = 0; i <2*m ; i++)
+    // {
+    //     cout << adjList[i] <<" ";
+    // }
+    // cout << endl;
+    // for(int i = 0; i < n+2; i ++)
+    // {
+    //     cout << graph[i] <<" ";
+    // }
+    // cout << endl;
 
 }
 int* getRho(int* graph, int* adjList, int strategy, int n)
@@ -104,15 +105,16 @@ int* getRho(int* graph, int* adjList, int strategy, int n)
 __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D)
 {
     bool* B = new bool[D+1]();
+    memset(B,0,sizeof(bool)*(D+1));
     // if(v==n) TODO make sure n+1 th entry should be the end index of the array to make sure this works.
     // This is very important as we do not want if statement here as this function gets used a lot of times
     for(int i = graph[v]; i < graph[v+1]; i++)
     {
         if(rho[adjList[i]] > rho[v])
         {
-            if(C[adjList[i]] == -1)
+            if(C[adjList[i]] == 0)
             {
-                return -1;
+                return 0;
             }
             else
             {
@@ -129,19 +131,19 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
     }
     // Should not come here at all
     assert(false);
-    return -1;
+    return 0;
 }
 
 __global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D)
 {
     int u = (blockDim.x * blockIdx.x)+threadIdx.x+1;
-    int minC = -1;
+    int minC = 0;
     // A very important change to make while loop to if. We just give one chance if doesn't get color
     // give another chance again later, no point in giving a chance again immediately
     if(C[u] == 0)
     {
         minC = getColor(graph, adjList, rho, C, u, D);
-        if(minC != -1)
+        if(minC != 0)
         {
             C[u] = minC;
         }
@@ -168,6 +170,7 @@ int main(int argc, char** argv)
     dim3 blockDim(1024,1,1);
 
     int* C = new int[n+1]();
+    memset(C, 0, sizeof(int)*(n+1));
 
     int *d_graph, *d_adjList, *d_rho, *d_C;
 
@@ -203,23 +206,40 @@ int main(int argc, char** argv)
         cout<<"Could not copy rho into d_rho"<<endl;
     }
 
-    if(cudaMemset(&d_C, 0, sizeof(int)*(n+1)) != cudaSuccess)
+    if(cudaMemset(d_C, 0, sizeof(int)*(n+1)) != cudaSuccess)
     {
         cout << "Could not memset C" << endl;
     }
+
+    int iter = 0;
 
     while(notAllVerticesColored(C,n))
     {
         // We need not run again for all vertices
         // Run only for uncolored vertices VERY IMPORTANT
+        cout << "Running iteration " << iter++ << endl;
         jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D);
-        if(cudaMemcpy(C,d_C,sizeof(int)*n,cudaMemcpyDeviceToHost) != cudaSuccess)
+        auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
+        if (code != cudaSuccess)
         {
-            cout << "Could not copy d_C into C" << endl;
+            cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+        }
+        for(int i = 1;i<=n;i++)
+        {
+            cout << "color of " << i << " " << C[i] << endl;
         }
     }
 
+    cudaFree(d_graph);
+    cudaFree(d_adjList);
+    cudaFree(d_rho);
+    cudaFree(d_C);
+
+    free(rho);
     // assert(true);
     assert(checkValidColoring(graph, adjList, C, n));
+    free(graph);
+    free(adjList);
+    free(C);
     return 0;
 }
