@@ -137,6 +137,10 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
 __global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D)
 {
     int u = (blockDim.x * blockIdx.x)+threadIdx.x+1;
+    if(u> n)
+    {
+        return;
+    }
     int minC = 0;
     // A very important change to make while loop to if. We just give one chance if doesn't get color
     // give another chance again later, no point in giving a chance again immediately
@@ -236,7 +240,6 @@ int main(int argc, char** argv)
     cudaFree(d_C);
 
     free(rho);
-    // assert(true);
     assert(checkValidColoring(graph, adjList, C, n));
     free(graph);
     free(adjList);
