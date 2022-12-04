@@ -12,16 +12,20 @@ using std::max;
 
 
 
-bool notAllVerticesColored(int* C, int n)
+bool notAllVerticesColored(int* C, int n, int &count)
 {
+    bool result = false;
+    count = n;
     for(int i = 1; i <= n; i++)
     {
         if(C[i] == 0)
         {
-            return true;
+            // return true;
+            result = true;
+            count--;
         }
     }
-    return false;
+    return result;
 }
 
 bool checkValidColoring(int* graph, int* adjList, int* C, int n)
@@ -134,10 +138,10 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
     return 0;
 }
 
-__global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D)
+__global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D, int n)
 {
     int u = (blockDim.x * blockIdx.x)+threadIdx.x+1;
-    if(u> n)
+    if(u> n || u<1)
     {
         return;
     }
@@ -161,6 +165,7 @@ int main(int argc, char** argv)
     if(argc == 1)
     {
         cout << "No input" << endl;
+        return 0;
     }
     // TODO by aditya
     int n, m, D;
@@ -216,22 +221,23 @@ int main(int argc, char** argv)
     }
 
     int iter = 0;
+    int count = 0;
 
-    while(notAllVerticesColored(C,n))
+    while(notAllVerticesColored(C,n,count))
     {
         // We need not run again for all vertices
         // Run only for uncolored vertices VERY IMPORTANT
-        cout << "Running iteration " << iter++ << endl;
-        jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D);
+        cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
+        jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D, n);
         auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
         {
             cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
-        for(int i = 1;i<=n;i++)
-        {
-            cout << "color of " << i << " " << C[i] << endl;
-        }
+        // for(int i = 1;i<=n;i++)
+        // {
+        //     cout << "color of " << i << " " << C[i] << endl;
+        // }
     }
 
     cudaFree(d_graph);
