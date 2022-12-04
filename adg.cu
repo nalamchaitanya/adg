@@ -118,6 +118,7 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
         {
             if(C[adjList[i]] == 0)
             {
+                free(B);
                 return 0;
             }
             else
@@ -126,15 +127,18 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
             }
         }
     }
+    // printf("get color %d\n",v);
     for(int i =1 ;i <= D; i++)
     {
         if(!B[i])
         {
+            free(B);
             return i;
         }
     }
     // Should not come here at all
     assert(false);
+    free(B);
     return 0;
 }
 
@@ -171,10 +175,11 @@ int main(int argc, char** argv)
     int n, m, D;
     int *adjList = NULL; //This is the adjacency list
     int *graph = NULL;
+    cout << "Parse inp" << endl;
     parseInput(argv[1], n , m, graph, adjList, D);
-
+    cout << "Parse input D" << D << " n " << n << " m " << m << endl;
     int* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
-    
+    cout << "Get Rho" << endl;
     dim3 gridDim((n+1023)/1024,1,1);
     dim3 blockDim(1024,1,1);
 
