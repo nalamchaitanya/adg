@@ -103,7 +103,7 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
 __global__ void setup_kernel(curandState *state){
 
   int idx = threadIdx.x+blockDim.x*blockIdx.x + 1;
-  curand_init(1234, idx, 0, &state[idx]);
+  curand_init(1234, idx, 0, &state[idx-1]);
 }
 
 
@@ -165,10 +165,10 @@ __global__ void getADG(int n, double eps, double* avg, int* ordering, int* degre
     if(((double)degree[u]) <= avg_val*(1 + eps)) //check if need to be in current set
     {
         //Need to include this vertex in the set
-        //double randf = curand_uniform(state + u - 1);
-       // double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
-        //ordering[u] = (int) truncf(temp);
-        ordering[u] = num_partition;
+        double randf = curand_uniform(&state[u-1]);
+        double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
+        ordering[u] = (int) truncf(temp);
+        //ordering[u] = num_partition;
     }
 }
 
@@ -381,8 +381,7 @@ int main(int argc, char** argv)
         cout << "No input" << endl;
         return 0;
     }
-    curandState *d_state;
-    cudaMalloc(&d_state, sizeof(curandState));
+
 
     // TODO by aditya
     int n, m, D;
@@ -393,10 +392,12 @@ int main(int argc, char** argv)
     cout << "Parse input D" << D << " n " << n << " m " << m << endl;
     int* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
     cout << "Get Rho" << endl;
-    // dim3 gridDim((n+1023)/1024,1,1);
-    // dim3 blockDim(1024,1,1);
-    dim3 gridDim(n,1,1);
-    dim3 blockDim(1,1,1);
+    dim3 gridDim((n+1023)/1024,1,1);
+    dim3 blockDim(1024,1,1);
+    curandState *d_state;
+    cudaMalloc(&d_state, blockDim.x * gridDim.x * sizeof(curandState));
+    // dim3 gridDim(n,1,1);
+    // dim3 blockDim(1,1,1);
 
     setup_kernel<<<gridDim,blockDim>>>(d_state);
     cout <<"finished random number generation" << endl;
