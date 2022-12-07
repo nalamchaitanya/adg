@@ -106,7 +106,8 @@ __global__ void setup_kernel(curandState *state){
   curand_init(1234, idx, 0, &state[idx]);
 }
 
-__global__ void avgDegree(int n, int sz, int* degree, int* ordering, int* aux_degree, int* aux_active, double* avg, int choice)
+
+__global__ void avgDegree1(int n, int sz, int* degree, int* ordering, int* aux_degree, int* aux_active)
 {
     //printf("Entered avg degree\n");
     int vert = threadIdx.x + 1;
@@ -118,10 +119,7 @@ __global__ void avgDegree(int n, int sz, int* degree, int* ordering, int* aux_de
     for(int i = vert; i <= sz;i += shift)
     {
         su += degree[i];
-         if(choice == 0)
-            su2 += (ordering[i] == 0)?1:0;
-         else
-             su2 += ordering[i];
+        su2 += (ordering[i] == 0)?1:0;
     }
     aux_degree[vert] = su;
     aux_active[vert] = su2;
@@ -129,9 +127,32 @@ __global__ void avgDegree(int n, int sz, int* degree, int* ordering, int* aux_de
     // if(su2 == 0)
     //     *avg = 0;
     // else
+    return;
+}
+
+__global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* avg)
+{
+    //printf("Entered avg degree\n");
+    int vert = threadIdx.x + 1;
+    if(vert > n or vert < 1)
+        return;
+    int shift = blockDim.x;
+    int su = 0;
+    int su2 = 0;
+    for(int i = vert; i <= sz;i += shift)
+    {
+        su += degree[i];
+        su2 += ordering[i];
+    }
+    //printf("The sums are %d and %d\n", su, su2);
+    // if(su2 == 0)
+    //     *avg = 0;
+    // else
     *avg = (double)su/su2;
     return;
 }
+
+
 
 __global__ void getADG(int n, double eps, double* avg, int* ordering, int* degree, curandState *state, int num_partition = 1)
 {
@@ -144,8 +165,8 @@ __global__ void getADG(int n, double eps, double* avg, int* ordering, int* degre
     if(((double)degree[u]) <= avg_val*(1 + eps)) //check if need to be in current set
     {
         //Need to include this vertex in the set
-        double randf = curand_uniform(state + u - 1);
-        double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
+        //double randf = curand_uniform(state + u - 1);
+       // double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
         //ordering[u] = (int) truncf(temp);
         ordering[u] = num_partition;
     }
@@ -318,10 +339,10 @@ int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, cu
         updateDegree<<<gridDim,blockDim>>>(d_graph, d_adjList, n, d_ordering, d_degree);
         cudaDeviceSynchronize();
 
-        avgDegree<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive, d_avg, 0);
+        avgDegree1<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive);
         cudaDeviceSynchronize();
         cout <<"avg degree number one successful" << endl;
-        avgDegree<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_auxdegree, d_auxactive, d_avg, 1);
+        avgDegree2<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_avg);
         cout <<"avg degree number two successful"<<endl;
         code = cudaMemcpy(avg, d_avg, sizeof(double),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
