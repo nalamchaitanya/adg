@@ -8,17 +8,33 @@
 #include <fstream>
 #include <vector>
 #include<cstdio>
+#include<map>
 
 using namespace std;
 using std::min;
 using std::max;
-const long scale_1 = 1e6, scale_2 = 1e4;
+const long scale_1 = 1e16,scale_2 = 1e15;
 
 
 
 
 
 
+bool notAllVerticesOrdered(long* C, int n, int &count)
+{
+    bool result = false;
+    count = n;
+    for(int i = 1; i <= n; i++)
+    {
+        if(C[i] == 0)
+        {
+            // return true;
+            result = true;
+            count--;
+        }
+    }
+    return result;
+}
 bool notAllVerticesColored(int* C, int n, int &count)
 {
     bool result = false;
@@ -103,11 +119,11 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
 __global__ void setup_kernel(curandState *state){
 
   int idx = threadIdx.x+blockDim.x*blockIdx.x + 1;
-  curand_init(1234, idx, 0, &state[idx-1]);
+  curand_init(clock64(), idx, 0, &state[idx-1]);
 }
 
 
-__global__ void avgDegree1(int n, int sz, int* degree, int* ordering, int* aux_degree, int* aux_active)
+__global__ void avgDegree1(int n, int sz, int* degree, long* ordering, int* aux_degree, int* aux_active)
 {
     //printf("Entered avg degree\n");
     int vert = threadIdx.x + 1;
@@ -138,7 +154,7 @@ __global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* av
         return;
     int shift = blockDim.x;
     int su = 0;
-    int su2 = 0;
+    long su2 = 0;
     for(int i = vert; i <= sz;i += shift)
     {
         su += degree[i];
@@ -154,7 +170,7 @@ __global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* av
 
 
 
-__global__ void getADG(int n, double eps, double* avg, int* ordering, int* degree, curandState *state, int num_partition = 1)
+__global__ void getADG(int n, double eps, double* avg, long* ordering, int* degree, curandState *state, int num_partition = 1)
 {
     int u = blockDim.x * blockIdx.x + threadIdx.x + 1; // vertex id
     double avg_val = *avg;
@@ -167,12 +183,12 @@ __global__ void getADG(int n, double eps, double* avg, int* ordering, int* degre
         //Need to include this vertex in the set
         double randf = curand_uniform(&state[u-1]);
         double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
-        ordering[u] = (int) truncf(temp);
+        ordering[u] = (long) trunc(temp);
         //ordering[u] = num_partition;
     }
 }
 
-__global__  void updateDegree(int *graph, int* adjList, int n, int* ordering, int* degree)
+__global__  void updateDegree(int *graph, int* adjList, int n, long* ordering, int* degree)
 {
     int u = blockDim.x * blockIdx.x + threadIdx.x + 1; // vertex id
     if(u > n || u < 1)
@@ -192,7 +208,7 @@ __global__  void updateDegree(int *graph, int* adjList, int n, int* ordering, in
     }
 }
 
-__device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D)
+__device__ int getColor(int* graph, int* adjList, long* rho, int* C, int v, int D)
 {
     int deg = graph[v+1]-graph[v];
     bool* B = new bool[deg+2]();
@@ -232,7 +248,7 @@ __device__ int getColor(int* graph, int* adjList, int* rho, int* C, int v, int D
     return 0;
 }
 
-__global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D, int n)
+__global__ void jpadg(int* graph, int* adjList, long* rho, int* C, int D, int n)
 {
     int u = (blockDim.x * blockIdx.x)+threadIdx.x+1;
     if(u> n || u<1)
@@ -253,26 +269,27 @@ __global__ void jpadg(int* graph, int* adjList, int* rho, int* C, int D, int n)
     return;
 }
 
-int* getRho(int* graph, int* adjList, int strategy, int n)
+long* getRho(int* graph, int* adjList, int strategy, int n)
 {
     // this has to give the total order permutation on the vertices.
     // based on strategy should give random order or adg order or dec-adg order
     // Should we implement this in Device using parallel programming
     // Maybe but later
 
-    int *rho = new int[n + 1];
+    long *rho = new long[n + 1];
     rho[0] = -1;
     for(int i  = 1; i <= n; i ++)
     {
         rho[i] = i;
-    }
+    }   
     random_shuffle(rho + 1, rho + n + 1);
     return rho;
 }
 
-int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, curandState *d_state,  dim3 gridDim, dim3 blockDim)
+long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, curandState *d_state,  dim3 gridDim, dim3 blockDim)
 {
-    int *d_degree, *d_ordering, *d_auxdegree, *d_auxactive;
+    int *d_degree, *d_auxdegree, *d_auxactive;
+    long* d_ordering;
 
     if(cudaMalloc(&d_degree,sizeof(int)*(n+1))!=cudaSuccess)
     {
@@ -287,12 +304,12 @@ int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, cu
         cout << "Could not allocate d_auxactive" << endl;
     }
 
-    if(cudaMalloc(&d_ordering,sizeof(int)*(n+1))!=cudaSuccess)
+    if(cudaMalloc(&d_ordering,sizeof(long)*(n+1))!=cudaSuccess)
     {
         cout << "Could not allocate d_ordering" << endl;
     }
 
-    if(cudaMemset(d_ordering, 0, sizeof(int)*(n+1)) != cudaSuccess)
+    if(cudaMemset(d_ordering, 0, sizeof(long)*(n+1)) != cudaSuccess)
     {
         cout << "Could not memset d_ordering" << endl;
     }
@@ -309,8 +326,8 @@ int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, cu
 
     int count = 0;
     int num_partition = 1;
-    int *ordering = new int[n+1]();
-    memset(ordering, 0 , sizeof(int)*(n + 1));
+    long *ordering = new long[n+1]();
+    memset(ordering, 0 , sizeof(long)*(n + 1));
 
     double *d_avg;
     // int *d_active; //number of vertices not yet in the ordering
@@ -330,7 +347,7 @@ int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, cu
     }
 
 
-    while(notAllVerticesColored(ordering, n,count))
+    while(notAllVerticesOrdered(ordering, n,count))
     {
         cout <<"Finished ordering" << count << endl;
         double *avg = new double;
@@ -356,7 +373,7 @@ int* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, cu
 
 
         getADG<<<gridDim, blockDim>>>(n, eps, d_avg, d_ordering, d_degree, d_state, num_partition++);
-        code = cudaMemcpy(ordering,d_ordering,sizeof(int)*(n+1),cudaMemcpyDeviceToHost); // copy from device to host
+        code = cudaMemcpy(ordering,d_ordering,sizeof(long)*(n+1),cudaMemcpyDeviceToHost); // copy from device to host
         if (code != cudaSuccess)
         {
             cout <<"Could not copy d_ordering into ordering" << endl;
@@ -390,7 +407,8 @@ int main(int argc, char** argv)
     cout << "Parse inp" << endl;
     parseInput(argv[1], n , m, graph, adjList, D);
     cout << "Parse input D" << D << " n " << n << " m " << m << endl;
-    int* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
+    //long* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
+    
     cout << "Get Rho" << endl;
     dim3 gridDim((n+1023)/1024,1,1);
     dim3 blockDim(1024,1,1);
@@ -402,10 +420,11 @@ int main(int argc, char** argv)
     setup_kernel<<<gridDim,blockDim>>>(d_state);
     cout <<"finished random number generation" << endl;
 
-    int* C = new int[n+1]();
+    int* C = new int[n+1](); //change back to int if needed
     memset(C, 0, sizeof(int)*(n+1));
 
-    int *d_graph, *d_adjList, *d_rho, *d_C;
+    int *d_graph, *d_adjList,*d_C;
+    long* d_rho;
 
     if(cudaMalloc(&d_graph,sizeof(int)*(n+2))!=cudaSuccess)
     {
@@ -417,7 +436,7 @@ int main(int argc, char** argv)
         cout << "Could not allocate d_adjList" << endl;
     }
 
-    if(cudaMalloc(&d_rho,sizeof(int)*(n+1))!=cudaSuccess)
+    if(cudaMalloc(&d_rho,sizeof(long)*(n+1))!=cudaSuccess)
     {
         cout << "Could not allocate d_graph" << endl;
     }
@@ -435,9 +454,6 @@ int main(int argc, char** argv)
         cout<<"Could not copy adjList into d_adjList"<<endl;
     }
 
-    if(cudaMemcpy(d_rho,rho,sizeof(int)*(n+1),cudaMemcpyHostToDevice) != cudaSuccess){
-        cout<<"Could not copy rho into d_rho"<<endl;
-    }
 
     if(cudaMemset(d_C, 0, sizeof(int)*(n+1)) != cudaSuccess)
     {
@@ -449,32 +465,51 @@ int main(int argc, char** argv)
     const double eps = 0.5;
 
     cout <<"calling getrhoadg" << endl;
+    long *rho = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state, gridDim, blockDim);
 
-    int *ordering = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state, gridDim, blockDim);
+
+
+  
 
     //print ADG ordering
-
+    map<long,long> mymap;
+    long flag = 0;
     for(int i = 1; i <= n; i ++)
     {
-        cout <<i<< " : "<< ordering[i] << endl;
+       // cout <<i<< " : "<< rho[i] << endl;
+        while(mymap.find(rho[i]) != mymap.end())
+        {
+            rho[i]++;
+            flag++;
+
+        }
+        mymap[rho[i]]++;
     }
 
-    // while(notAllVerticesColored(C,n,count))
-    // {
-    //     // We need not run again for all vertices
-    //     // Run only for uncolored vertices VERY IMPORTANT
-    //     cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
-    //     jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D, n);
-    //     auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
-    //     if (code != cudaSuccess)
-    //     {
-    //         cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
-    //     }
-    //     // for(int i = 1;i<=n;i++)
-    //     // {
-    //     //     cout << "color of " << i << " " << C[i] << endl;
-    //     // }
-    // }
+    if(cudaMemcpy(d_rho,rho,sizeof(long)*(n+1),cudaMemcpyHostToDevice) != cudaSuccess){
+        cout<<"Could not copy rho into d_rho"<<endl;
+    }
+
+
+    cout <<"Number of collisions" << flag << endl;
+
+    while(notAllVerticesColored(C,n,count))
+    {
+        // We need not run again for all vertices
+        // Run only for uncolored vertices VERY IMPORTANT
+        cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
+        jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D, n);
+        auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
+        if (code != cudaSuccess)
+        {
+            cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+        }
+        // for(int i = 1;i<=n;i++)
+        // {
+        //     cout << "color of " << i << " " << C[i] << endl;
+        // }
+    }
+    cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
 
     cudaFree(d_graph);
     cudaFree(d_adjList);
