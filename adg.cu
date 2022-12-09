@@ -9,11 +9,11 @@
 #include <vector>
 #include<cstdio>
 #include<map>
-
+#include<queue>
 using namespace std;
 using std::min;
 using std::max;
-const long scale_1 = 1e16,scale_2 = 1e15;
+const long scale_1 = 1e9,scale_2 = 1e10;
 
 bool notAllVerticesOrdered(long* ordering, int n, int &count)
 {
@@ -51,19 +51,79 @@ bool notAllVerticesColored(int* C, int n, int &count)
 bool checkValidColoring(int* graph, int* adjList, int* C, int n)
 {
     cout << "coloring" << endl;
+    int maxcolor = 0;
     for(int i=1;i<=n;i++)
     {
-        cout << i << " " << C[i] << endl;
+       // cout << i << " " << C[i] << endl;
+        maxcolor = max(maxcolor, C[i]);
         for(int j=graph[i];j<graph[i+1];j++)
         {
             if(C[adjList[j]] == C[i])
             {
+                //cout <<"Lol" << adjList[j] <<" "<<i<< endl;
                 return false;
             }
         }
     }
+    cout << maxcolor << endl;
     return true;
 }
+
+int updateGraph(int *graph, int*adjList, int* cluster,int n)
+{
+    int ctr = 0;
+    for(int i = 1; i <=n ; i ++)
+    {
+
+
+    }
+    return 0;
+}
+
+int bfs(int src, int n, int m, int* graph, int*adjList, int* cluster, int maxnodes, int num_cluster = 1)
+{
+    queue<int> q;
+    //vector<bool> vis(n + 1, false);
+    q.push(src);
+    cluster[src] = num_cluster++;
+
+    maxnodes--;
+    while(!q.empty())
+    {
+        int x = q.front();
+        q.pop();
+        for(int j = graph[x]; j < graph[x + 1]; j ++)
+        {
+            if(maxnodes == 0)
+                break;
+            if(!cluster[adjList[j]])
+            {
+                q.push(adjList[j]);
+                cluster[adjList[j]] = num_cluster++;
+                maxnodes--;
+            }
+        }
+
+
+    }
+    return num_cluster;
+
+
+}
+int* cluster_graph(int n, int m, int* graph, int* adjList, int D)
+{
+    int* cluster = new int[n + 1];
+    memset(cluster, 0, n*sizeof(int));
+    int num_cluster = 1;
+    for(int i = 1; i <= n; i ++)
+    {
+        if(!cluster[i])
+            num_cluster = bfs(i, n, m, graph, adjList, cluster, 1024, num_cluster);
+    }
+
+    return cluster;
+
+} 
 
 void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int &D)
 {
@@ -72,20 +132,23 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     fstream f;
     f.open(inputFile, ios::in);
     f >> n >> m;
+    cout << n << m << endl;
 
     graph = new int[n + 2];
     adjList = new int[2*m];
     graph[0] = m;
-    vector<int> g[n + 1];
+    vector<int> *g = new vector<int>[n + 1];
     int u,v;
     for(int i = 0; i < m; i ++)
     {
         f >> u >> v;
         g[u].push_back(v);
         g[v].push_back(u);
+       // cout <<"done " <<  i << endl;
     }
     D = 0;
     int ctr = 0;
+    //cout <<"hey there" << endl;
     for(int i = 1; i <=n; i ++)
     {
         graph[i] = ctr;
@@ -97,6 +160,7 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     }
     D++;
     graph[n + 1] = ctr;
+   // cout <<"hey there" << endl;
     f.close();
     // for(int i = 0; i <2*m ; i++)
     // {
@@ -467,6 +531,7 @@ int main(int argc, char** argv)
     parseInput(argv[1], n , m, graph, adjList, D);
     cout << "Parse input D" << D << " n " << n << " m " << m << endl;
     //long* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
+
     
     cout << "Get Rho" << endl;
     dim3 gridDim((n+1023)/1024,1,1);
@@ -528,17 +593,26 @@ int main(int argc, char** argv)
 
     //print ADG ordering
     map<long,long> mymap;
+    cout <<mymap.max_size() << "is the maximum size I can hold" << endl;
     long flag = 0;
+    for(int i  =1; i <= n; i ++)
+    {
+        cout <<i<< " : "<< rho[i] << endl;
+    }
     for(int i = 1; i <= n; i ++)
     {
-       // cout <<i<< " : "<< rho[i] << endl;
+        cout << "hey" <<i << endl;
+        cout <<"hey2  " <<rho[i] << endl;
+
         while(mymap.find(rho[i]) != mymap.end())
         {
+            cout <<"resolving  " << flag << endl;
             rho[i]++;
             flag++;
         }
         mymap[rho[i]]++;
     }
+    cout <<"collision resolved" << endl;
 
     if(cudaMemcpy(d_rho,rho,sizeof(long)*(n+1),cudaMemcpyHostToDevice) != cudaSuccess){
         cout<<"Could not copy rho into d_rho"<<endl;
