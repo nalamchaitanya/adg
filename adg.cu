@@ -162,7 +162,75 @@ __global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* av
     return;
 }
 
+__global__ void halfSum(int limit, long* arr1, long* arr2)
+{
+    int i = blockDim.x * blockIdx.x + threadIdx.x + 1;
+    if(2*i <= limit)
+    {
+        arr2[i] = arr1[2*i-1]+ arr1[2*i];
+    }
+    else if(2*i == limit+1)
+    {
+        arr2[i] = arr1[2*i-1];
+    }
+    return;
+}
 
+__global__ void halfSum2(int limit, int* arr1, long* arr2)
+{
+    int i = blockDim.x * blockIdx.x + threadIdx.x + 1;
+    if(2*i <= limit)
+    {
+        arr2[i] = arr1[2*i-1]+ arr1[2*i];
+    }
+    else if(2*i == limit+1)
+    {
+        arr2[i] = arr1[2*i-1];
+    }
+    return;
+}
+
+long getDegSum(int n, int* degree)
+{
+    long* arr1;
+    if(cudaMalloc(&arr1,sizeof(long)*((n+1)/2 + 1))!=cudaSuccess) //(n+1)/2 for odd case handling, +1 for 1-index
+    {
+        cout << "Could not allocate temp_d_degree" << endl;
+    }
+
+    int threadCount = (n+1)/2;
+    dim3 gridDim((threadCount+1023)/1024, 1,1);
+    dim3 blockDim(1024,1,1);
+    halfSum2<<<gridDim, blockDim>>>(n,degree,arr1);
+    n=(n+1)/2;
+    long* arr2;
+    if(cudaMalloc(&arr2,sizeof(long)*((n+1)/2 + 1))!=cudaSuccess) //(n+1)/2 for odd case handling, +1 for 1-index
+    {
+        cout << "Could not allocate temp_d_degree" << endl;
+    }
+    long* temp;
+    while(n>1)
+    {
+        cudaDeviceSynchronize();
+        threadCount = (n+1)/2;
+        gridDim.x = (threadCount+1023)/1024;
+        halfSum<<<gridDim, blockDim>>>(n,arr1,arr2);
+        n=(n+1)/2;
+        temp = arr1;
+        arr1 = arr2;
+        arr2 = temp;
+    }
+    long sum;
+    auto code = cudaMemcpy(&sum,&arr1[1],sizeof(long),cudaMemcpyDeviceToHost);
+    if (code != cudaSuccess)
+    {
+        cout << "GPU: arr1 to sum " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+    }
+    cout << "Sum : " << sum << endl;
+    cudaFree(arr1);
+    cudaFree(arr2);
+    return sum;
+}
 
 __global__ void getADG(int n, double eps, double* avg, long* ordering, int* degree, curandState *state, int num_partition, int* temp_degree, int* graph, int* adjList)
 {
@@ -368,8 +436,10 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         avgDegree1<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive);
         cudaDeviceSynchronize();
 
-        avgDegree2<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_avg);
-        code = cudaMemcpy(avg, d_avg, sizeof(double),cudaMemcpyDeviceToHost);
+        *avg = double(getDegSum(n,d_degree))/(n-count);
+
+        // avgDegree2<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_avg);
+        code = cudaMemcpy(d_avg, avg, sizeof(double),cudaMemcpyHostToDevice);
         if (code != cudaSuccess)
         {
             cout << "GPU: d_avg to avg " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
@@ -459,10 +529,6 @@ int main(int argc, char** argv)
 
     cout <<"calling getrhoadg" << endl;
     long *rho = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state);
-
-
-
-  
 
     //print ADG ordering
     map<long,long> mymap;
