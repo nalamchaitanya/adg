@@ -164,7 +164,7 @@ __global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* av
 
 
 
-__global__ void getADG(int n, double eps, double* avg, long* ordering, int* degree, curandState *state, int num_partition = 1)
+__global__ void getADG(int n, double eps, double* avg, long* ordering, int* degree, curandState *state, int num_partition, int* temp_degree, int* graph, int* adjList)
 {
     int u = blockDim.x * blockIdx.x + threadIdx.x + 1; // vertex id
     double avg_val = *avg;
@@ -179,26 +179,32 @@ __global__ void getADG(int n, double eps, double* avg, long* ordering, int* degr
         double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
         ordering[u] = (long) trunc(temp);
         //ordering[u] = num_partition;
-        for()
+        for(int i = graph[u];i<graph[u+1];i++)
+        {
+            atomicAdd(temp_degree+adjList[i],-1);
+        }
     }
+    return;
 }
 
-__global__  void updateDegree(int *graph, int* adjList, int n, long* ordering, int* degree)
+__global__  void updateDegree(long* ordering, int* degree, int* temp_degree, int n)
 {
     int u = blockDim.x * blockIdx.x + threadIdx.x + 1; // vertex id
-    if(u > n || u < 1 || ordering[u]!=0) //already ordered
+    if(u > n || u < 1)
     {
         return;
     }
-    degree[u] = 0;
+    //already ordered
+    degree[u] = (ordering[u] == 0 ? temp_degree[u] : 0);
     //Update degrees
-    for(int i = graph[u]; i < graph[u+1]; i ++)
-    {
-        if(ordering[adjList[i]] == 0)
-        {
-            degree[u] += 1;
-        }
-    }
+    // for(int i = graph[u]; i < graph[u+1]; i ++)
+    // {
+    //     if(ordering[adjList[i]] == 0)
+    //     {
+    //         degree[u] += 1;
+    //     }
+    // }
+    return;
 }
 
 __device__ int getColor(int* graph, int* adjList, long* rho, int* C, int v, int D)
@@ -226,11 +232,12 @@ __device__ int getColor(int* graph, int* adjList, long* rho, int* C, int v, int 
             }
         }
     }
-    // printf("get color %d\n",v);
-    for(int i =1 ;i <=deg+1; i++)
+    // printf("get color %d ended\n",v);
+    for(int i =1 ;i <= deg+1; i++)
     {
         if(!B[i])
         {
+            // printf("get color %d for %d\n",i,v);
             free(B);
             return i;
         }
@@ -269,11 +276,25 @@ long* getRho(int* graph, int* adjList, int strategy, int n)
     return rho;
 }
 
-long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, curandState *d_state,  dim3 gridDim, dim3 blockDim)
+__global__ void getDegree(int* graph, int* degree, int n)
+{
+    int u = blockIdx.x * blockDim.x + threadIdx.x + 1;
+    if(u>n || u<1)
+    {
+        return;
+    }
+    degree[u] = graph[u+1]-graph[u];
+    return;
+}
+
+long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, curandState *d_state)
 {
     int *d_degree, *d_auxdegree, *d_auxactive;
     long* d_ordering;
+    dim3 gridDim((n+1023)/1024,1,1);
+    dim3 blockDim(1024,1,1);
 
+{
     if(cudaMalloc(&d_degree,sizeof(int)*(n+1))!=cudaSuccess)
     {
         cout << "Could not allocate d_degree" << endl;
@@ -306,7 +327,7 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
     {
         cout << "Could not memset d_auxactive" << endl;
     }
-
+}
     int count = 0;
     int num_partition = 1;
     long *ordering = new long[n+1]();
@@ -328,11 +349,20 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
     }
 
-    while(notAllVerticesOrdered(ordering, n,count))
+    int* temp_d_degree;
+    if(cudaMalloc(&temp_d_degree,sizeof(int)*(n+1))!=cudaSuccess)
+    {
+        cout << "Could not allocate temp_d_degree" << endl;
+    }
+
+    getDegree<<<gridDim, blockDim>>>(d_graph, temp_d_degree, n);
+
+    while(notAllVerticesOrdered(ordering, n, count))
     {
         cout <<"Finished ordering" << count << endl;
         double *avg = new double;
-        updateDegree<<<gridDim,blockDim>>>(d_graph, d_adjList, n, d_ordering, d_degree);
+
+        updateDegree<<<gridDim,blockDim>>>(d_ordering, d_degree, temp_d_degree, n);
         cudaDeviceSynchronize();
 
         avgDegree1<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive);
@@ -345,7 +375,7 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
             cout << "GPU: d_avg to avg " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
         cout <<"avg degree is "<<*avg << endl;
-        getADG<<<gridDim, blockDim>>>(n, eps, d_avg, d_ordering, d_degree, d_state, num_partition++);
+        getADG<<<gridDim, blockDim>>>(n, eps, d_avg, d_ordering, d_degree, d_state, num_partition++, temp_d_degree, d_graph, d_adjList);
         code = cudaMemcpy(ordering,d_ordering,sizeof(long)*(n+1),cudaMemcpyDeviceToHost); // copy from device to host
         if (code != cudaSuccess)
         {
@@ -359,7 +389,6 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
 
 int main(int argc, char** argv)
 {
-
     if(argc == 1)
     {
         cout << "No input" << endl;
@@ -429,7 +458,7 @@ int main(int argc, char** argv)
     const double eps = 0.5;
 
     cout <<"calling getrhoadg" << endl;
-    long *rho = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state, gridDim, blockDim);
+    long *rho = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state);
 
 
 
@@ -480,12 +509,12 @@ int main(int argc, char** argv)
     cudaFree(d_C);
 
     free(rho);
-    free(graph);
-    free(adjList);
-    free(C);
     if(!checkValidColoring(graph, adjList, C, n))
     {
         cout << "Assert failed" << endl;
     }
+    free(graph);
+    free(adjList);
+    free(C);
     return 0;
 }
