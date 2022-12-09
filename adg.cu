@@ -433,12 +433,8 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         updateDegree<<<gridDim,blockDim>>>(d_ordering, d_degree, temp_d_degree, n);
         cudaDeviceSynchronize();
 
-        avgDegree1<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive);
-        cudaDeviceSynchronize();
-
         *avg = double(getDegSum(n,d_degree))/(n-count);
 
-        // avgDegree2<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_avg);
         code = cudaMemcpy(d_avg, avg, sizeof(double),cudaMemcpyHostToDevice);
         if (code != cudaSuccess)
         {
