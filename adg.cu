@@ -15,26 +15,23 @@ using std::min;
 using std::max;
 const long scale_1 = 1e16,scale_2 = 1e15;
 
-
-
-
-
-
-bool notAllVerticesOrdered(long* C, int n, int &count)
+bool notAllVerticesOrdered(long* ordering, int n, int &count)
 {
     bool result = false;
     count = n;
     for(int i = 1; i <= n; i++)
     {
-        if(C[i] == 0)
+        if(ordering[i] == 0)
         {
             // return true;
+            // TODO return here, are we using count somewhere?
             result = true;
             count--;
         }
     }
     return result;
 }
+
 bool notAllVerticesColored(int* C, int n, int &count)
 {
     bool result = false;
@@ -114,14 +111,11 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     return;
 }
 
-
-
 __global__ void setup_kernel(curandState *state){
 
   int idx = threadIdx.x+blockDim.x*blockIdx.x + 1;
   curand_init(clock64(), idx, 0, &state[idx-1]);
 }
-
 
 __global__ void avgDegree1(int n, int sz, int* degree, long* ordering, int* aux_degree, int* aux_active)
 {
@@ -185,19 +179,18 @@ __global__ void getADG(int n, double eps, double* avg, long* ordering, int* degr
         double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
         ordering[u] = (long) trunc(temp);
         //ordering[u] = num_partition;
+        for()
     }
 }
 
 __global__  void updateDegree(int *graph, int* adjList, int n, long* ordering, int* degree)
 {
     int u = blockDim.x * blockIdx.x + threadIdx.x + 1; // vertex id
-    if(u > n || u < 1)
+    if(u > n || u < 1 || ordering[u]!=0) //already ordered
     {
         return;
     }
     degree[u] = 0;
-    if(ordering[u] != 0)    //already ordered
-        return;
     //Update degrees
     for(int i = graph[u]; i < graph[u+1]; i ++)
     {
@@ -326,57 +319,41 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
     {
         cout <<"Could not malloc d_avg"<<endl;
 
-        cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+        cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
     }
     code = cudaMemset(d_avg, 0, sizeof(double));
     // auto code = cudaMalloc(&d_active, sizeof(int));
     if (code != cudaSuccess)
     {
-
-        cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+        cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
     }
-
 
     while(notAllVerticesOrdered(ordering, n,count))
     {
         cout <<"Finished ordering" << count << endl;
         double *avg = new double;
-
-
         updateDegree<<<gridDim,blockDim>>>(d_graph, d_adjList, n, d_ordering, d_degree);
         cudaDeviceSynchronize();
 
         avgDegree1<<<1, blockDim.x>>>(n, n,  d_degree, d_ordering, d_auxdegree, d_auxactive);
         cudaDeviceSynchronize();
-        cout <<"avg degree number one successful" << endl;
+
         avgDegree2<<<1, 1>>>(n, min(n, blockDim.x), d_auxdegree, d_auxactive, d_avg);
-        cout <<"avg degree number two successful"<<endl;
         code = cudaMemcpy(avg, d_avg, sizeof(double),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
         {
-            cout <<"Could not copy d_avg to avg" << endl;
-
-            cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+            cout << "GPU: d_avg to avg " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
-        cout <<"Copy done "<< endl;
         cout <<"avg degree is "<<*avg << endl;
-
-
         getADG<<<gridDim, blockDim>>>(n, eps, d_avg, d_ordering, d_degree, d_state, num_partition++);
         code = cudaMemcpy(ordering,d_ordering,sizeof(long)*(n+1),cudaMemcpyDeviceToHost); // copy from device to host
         if (code != cudaSuccess)
         {
-            cout <<"Could not copy d_ordering into ordering" << endl;
-
-            cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+            cout << "GPU d_ordering into ordering " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
-
     }
     cout <<"Finished ordering " << count << endl;
     return ordering;
-
-
-
 }
 
 
@@ -488,7 +465,7 @@ int main(int argc, char** argv)
         auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
         {
-            cout << "GPUassert:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+            cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
         // for(int i = 1;i<=n;i++)
         // {
