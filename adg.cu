@@ -15,18 +15,16 @@ using std::min;
 using std::max;
 const long scale_1 = 1e16,scale_2 = 1e15;
 
-bool notAllVerticesOrdered(long* ordering, int n, int &count)
+bool notAllVerticesOrdered(long* ordering, int n)
 {
     bool result = false;
-    count = n;
     for(int i = 1; i <= n; i++)
     {
         if(ordering[i] == 0)
         {
             // return true;
             // TODO return here, are we using count somewhere?
-            result = true;
-            count--;
+            return true;
         }
     }
     return result;
@@ -246,6 +244,8 @@ __global__ void getADG(int n, double eps, double* avg, long* ordering, int* degr
         double randf = curand_uniform(&state[u-1]);
         double temp = scale_1 * num_partition + randf *(scale_2 + 0.99999);
         ordering[u] = (long) trunc(temp);
+        // TODO BUG POSSIBLE
+        atomicAdd((int*)ordering,1);
         //ordering[u] = num_partition;
         for(int i = graph[u];i<graph[u+1];i++)
         {
@@ -396,7 +396,6 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         cout << "Could not memset d_auxactive" << endl;
     }
 }
-    int count = 0;
     int num_partition = 1;
     long *ordering = new long[n+1]();
     memset(ordering, 0 , sizeof(long)*(n + 1));
@@ -424,16 +423,16 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
     }
 
     getDegree<<<gridDim, blockDim>>>(d_graph, temp_d_degree, n);
-
-    while(notAllVerticesOrdered(ordering, n, count))
+    ordering[0] = 0;
+    while(ordering[0]<n)
     {
-        cout <<"Finished ordering" << count << endl;
+        cout <<"Finished ordering" << ordering[0] << endl;
         double *avg = new double;
 
         updateDegree<<<gridDim,blockDim>>>(d_ordering, d_degree, temp_d_degree, n);
         cudaDeviceSynchronize();
 
-        *avg = double(getDegSum(n,d_degree))/(n-count);
+        *avg = double(getDegSum(n,d_degree))/(n-ordering[0]);
 
         code = cudaMemcpy(d_avg, avg, sizeof(double),cudaMemcpyHostToDevice);
         if (code != cudaSuccess)
@@ -448,7 +447,8 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
             cout << "GPU d_ordering into ordering " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
     }
-    cout <<"Finished ordering " << count << endl;
+    assert(ordering[0]==n);
+    cout <<"Finished ordering " << ordering[0] << endl;
     return ordering;
 }
 
