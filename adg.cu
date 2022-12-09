@@ -15,36 +15,36 @@ using std::min;
 using std::max;
 const long scale_1 = 1e16,scale_2 = 1e15;
 
-bool notAllVerticesOrdered(long* ordering, int n)
-{
-    bool result = false;
-    for(int i = 1; i <= n; i++)
-    {
-        if(ordering[i] == 0)
-        {
-            // return true;
-            // TODO return here, are we using count somewhere?
-            return true;
-        }
-    }
-    return result;
-}
+// bool notAllVerticesOrdered(long* ordering, int n)
+// {
+//     bool result = false;
+//     for(int i = 1; i <= n; i++)
+//     {
+//         if(ordering[i] == 0)
+//         {
+//             // return true;
+//             // TODO return here, are we using count somewhere?
+//             return true;
+//         }
+//     }
+//     return result;
+// }
 
-bool notAllVerticesColored(int* C, int n, int &count)
-{
-    bool result = false;
-    count = n;
-    for(int i = 1; i <= n; i++)
-    {
-        if(C[i] == 0)
-        {
-            // return true;
-            result = true;
-            count--;
-        }
-    }
-    return result;
-}
+// bool notAllVerticesColored(int* C, int n, int &count)
+// {
+//     bool result = false;
+//     count = n;
+//     for(int i = 1; i <= n; i++)
+//     {
+//         if(C[i] == 0)
+//         {
+//             // return true;
+//             result = true;
+//             count--;
+//         }
+//     }
+//     return result;
+// }
 
 bool checkValidColoring(int* graph, int* adjList, int* C, int n)
 {
@@ -115,50 +115,50 @@ __global__ void setup_kernel(curandState *state){
   curand_init(clock64(), idx, 0, &state[idx-1]);
 }
 
-__global__ void avgDegree1(int n, int sz, int* degree, long* ordering, int* aux_degree, int* aux_active)
-{
-    //printf("Entered avg degree\n");
-    int vert = threadIdx.x + 1;
-    if(vert > n or vert < 1)
-        return;
-    int shift = blockDim.x;
-    int su = 0;
-    int su2 = 0;
-    for(int i = vert; i <= sz;i += shift)
-    {
-        su += degree[i];
-        su2 += (ordering[i] == 0)?1:0;
-    }
-    aux_degree[vert] = su;
-    aux_active[vert] = su2;
-    //printf("The sums are %d and %d\n", su, su2);
-    // if(su2 == 0)
-    //     *avg = 0;
-    // else
-    return;
-}
+// __global__ void avgDegree1(int n, int sz, int* degree, long* ordering, int* aux_degree, int* aux_active)
+// {
+//     //printf("Entered avg degree\n");
+//     int vert = threadIdx.x + 1;
+//     if(vert > n or vert < 1)
+//         return;
+//     int shift = blockDim.x;
+//     int su = 0;
+//     int su2 = 0;
+//     for(int i = vert; i <= sz;i += shift)
+//     {
+//         su += degree[i];
+//         su2 += (ordering[i] == 0)?1:0;
+//     }
+//     aux_degree[vert] = su;
+//     aux_active[vert] = su2;
+//     //printf("The sums are %d and %d\n", su, su2);
+//     // if(su2 == 0)
+//     //     *avg = 0;
+//     // else
+//     return;
+// }
 
-__global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* avg)
-{
-    //printf("Entered avg degree\n");
-    int vert = threadIdx.x + 1;
-    if(vert > n or vert < 1)
-        return;
-    int shift = blockDim.x;
-    int su = 0;
-    long su2 = 0;
-    for(int i = vert; i <= sz;i += shift)
-    {
-        su += degree[i];
-        su2 += ordering[i];
-    }
-    //printf("The sums are %d and %d\n", su, su2);
-    // if(su2 == 0)
-    //     *avg = 0;
-    // else
-    *avg = (double)su/su2;
-    return;
-}
+// __global__ void avgDegree2(int n, int sz, int* degree, int* ordering, double* avg)
+// {
+//     //printf("Entered avg degree\n");
+//     int vert = threadIdx.x + 1;
+//     if(vert > n or vert < 1)
+//         return;
+//     int shift = blockDim.x;
+//     int su = 0;
+//     long su2 = 0;
+//     for(int i = vert; i <= sz;i += shift)
+//     {
+//         su += degree[i];
+//         su2 += ordering[i];
+//     }
+//     //printf("The sums are %d and %d\n", su, su2);
+//     // if(su2 == 0)
+//     //     *avg = 0;
+//     // else
+//     *avg = (double)su/su2;
+//     return;
+// }
 
 __global__ void halfSum(int limit, long* arr1, long* arr2)
 {
@@ -324,6 +324,10 @@ __global__ void jpadg(int* graph, int* adjList, long* rho, int* C, int D, int n)
         return;
     }
     C[u] = getColor(graph, adjList, rho, C, u, D);
+    if(C[u] != 0)
+    {
+        atomicAdd(C,1);
+    }
     return;
 }
 
@@ -357,23 +361,14 @@ __global__ void getDegree(int* graph, int* degree, int n)
 
 long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, curandState *d_state)
 {
-    int *d_degree, *d_auxdegree, *d_auxactive;
+    int *d_degree;
     long* d_ordering;
     dim3 gridDim((n+1023)/1024,1,1);
     dim3 blockDim(1024,1,1);
 
-{
     if(cudaMalloc(&d_degree,sizeof(int)*(n+1))!=cudaSuccess)
     {
         cout << "Could not allocate d_degree" << endl;
-    }
-    if(cudaMalloc(&d_auxdegree,sizeof(int)*(n+1))!=cudaSuccess)
-    {
-        cout << "Could not allocate d_auxdegree" << endl;
-    }
-    if(cudaMalloc(&d_auxactive,sizeof(int)*(n+1))!=cudaSuccess)
-    {
-        cout << "Could not allocate d_auxactive" << endl;
     }
 
     if(cudaMalloc(&d_ordering,sizeof(long)*(n+1))!=cudaSuccess)
@@ -386,31 +381,17 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         cout << "Could not memset d_ordering" << endl;
     }
 
-    if(cudaMemset(d_auxdegree, 0, sizeof(int)*(n+1)) != cudaSuccess)
-    {
-        cout << "Could not memset d_auxdegree" << endl;
-    }
-
-    if(cudaMemset(d_auxactive, 0, sizeof(int)*(n+1)) != cudaSuccess)
-    {
-        cout << "Could not memset d_auxactive" << endl;
-    }
-}
     int num_partition = 1;
     long *ordering = new long[n+1]();
     memset(ordering, 0 , sizeof(long)*(n + 1));
 
     double *d_avg;
-    // int *d_active; //number of vertices not yet in the ordering
     auto code = cudaMalloc(&d_avg, sizeof(double));
     if (code != cudaSuccess)
     {
-        cout <<"Could not malloc d_avg"<<endl;
-
-        cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
+        cout << "GPU: Could not malloc d_avg" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
     }
     code = cudaMemset(d_avg, 0, sizeof(double));
-    // auto code = cudaMalloc(&d_active, sizeof(int));
     if (code != cudaSuccess)
     {
         cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
@@ -448,6 +429,10 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         }
     }
     assert(ordering[0]==n);
+    cudaFree(d_degree);
+    cudaFree(temp_d_degree);
+    cudaFree(d_avg);
+    cudaFree(d_ordering);
     cout <<"Finished ordering " << ordering[0] << endl;
     return ordering;
 }
@@ -461,30 +446,12 @@ int main(int argc, char** argv)
         return 0;
     }
     int n, m, D;
-    int *adjList = NULL; //This is the adjacency list
+    int *adjList = NULL;
     int *graph = NULL;
-    cout << "Parse inp" << endl;
     parseInput(argv[1], n , m, graph, adjList, D);
-    cout << "Parse input D" << D << " n " << n << " m " << m << endl;
-    //long* rho = getRho(graph, adjList, 1, n); // 1= random order or largest degree first
+    cout << "Parse input D " << D << " n " << n << " m " << m << endl;
+    int *d_graph, *d_adjList;
     
-    cout << "Get Rho" << endl;
-    dim3 gridDim((n+1023)/1024,1,1);
-    dim3 blockDim(1024,1,1);
-    curandState *d_state;
-    cudaMalloc(&d_state, blockDim.x * gridDim.x * sizeof(curandState));
-    // dim3 gridDim(n,1,1);
-    // dim3 blockDim(1,1,1);
-
-    setup_kernel<<<gridDim,blockDim>>>(d_state);
-    cout <<"finished random number generation" << endl;
-
-    int* C = new int[n+1](); //change back to int if needed
-    memset(C, 0, sizeof(int)*(n+1));
-
-    int *d_graph, *d_adjList,*d_C;
-    long* d_rho;
-
     if(cudaMalloc(&d_graph,sizeof(int)*(n+2))!=cudaSuccess)
     {
         cout << "Could not allocate d_graph" << endl;
@@ -495,16 +462,6 @@ int main(int argc, char** argv)
         cout << "Could not allocate d_adjList" << endl;
     }
 
-    if(cudaMalloc(&d_rho,sizeof(long)*(n+1))!=cudaSuccess)
-    {
-        cout << "Could not allocate d_graph" << endl;
-    }
-
-    if(cudaMalloc(&d_C, sizeof(int)*(n+1))!=cudaSuccess)
-    {
-        cout << "Could not allocate d_C" << endl;
-    }
-
     if(cudaMemcpy(d_graph,graph,sizeof(int)*(n+2),cudaMemcpyHostToDevice) != cudaSuccess){
         cout<<"Could not copy graph into d_graph"<<endl;
     }
@@ -513,14 +470,14 @@ int main(int argc, char** argv)
         cout<<"Could not copy adjList into d_adjList"<<endl;
     }
 
-
-    if(cudaMemset(d_C, 0, sizeof(int)*(n+1)) != cudaSuccess)
-    {
-        cout << "Could not memset C" << endl;
-    }
+    dim3 gridDim((n+1023)/1024,1,1);
+    dim3 blockDim(1024,1,1);
+    curandState *d_state;
+    cudaMalloc(&d_state, blockDim.x * gridDim.x * sizeof(curandState));
+    setup_kernel<<<gridDim,blockDim>>>(d_state);
+    cout <<"finished random number generation" << endl;
 
     int iter = 0;
-    int count = 0;
     const double eps = 0.5;
 
     cout <<"calling getrhoadg" << endl;
@@ -531,7 +488,6 @@ int main(int argc, char** argv)
     long flag = 0;
     for(int i = 1; i <= n; i ++)
     {
-       // cout <<i<< " : "<< rho[i] << endl;
         while(mymap.find(rho[i]) != mymap.end())
         {
             rho[i]++;
@@ -539,38 +495,51 @@ int main(int argc, char** argv)
         }
         mymap[rho[i]]++;
     }
+    cout <<"Number of collisions" << flag << endl;
+
+    long* d_rho;
+    if(cudaMalloc(&d_rho,sizeof(long)*(n+1))!=cudaSuccess)
+    {
+        cout << "Could not allocate d_graph" << endl;
+    }
 
     if(cudaMemcpy(d_rho,rho,sizeof(long)*(n+1),cudaMemcpyHostToDevice) != cudaSuccess){
         cout<<"Could not copy rho into d_rho"<<endl;
     }
+    free(rho);
 
+    int* C = new int[n+1](); //change back to int if needed
+    memset(C, 0, sizeof(int)*(n+1));
+    int* d_C;
+    if(cudaMalloc(&d_C, sizeof(int)*(n+1))!=cudaSuccess)
+    {
+        cout << "Could not allocate d_C" << endl;
+    }
+    if(cudaMemset(d_C, 0, sizeof(int)*(n+1)) != cudaSuccess)
+    {
+        cout << "Could not memset C" << endl;
+    }
 
-    cout <<"Number of collisions" << flag << endl;
-
-    while(notAllVerticesColored(C,n,count))
+    // C[0] = 0;
+    while(C[0]< n)
     {
         // We need not run again for all vertices
         // Run only for uncolored vertices VERY IMPORTANT
-        cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
+        cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
         jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D, n);
         auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
         {
             cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
-        // for(int i = 1;i<=n;i++)
-        // {
-        //     cout << "color of " << i << " " << C[i] << endl;
-        // }
     }
-    cout << "Running iteration " << iter++ << " colored : " << count << "/" << n << endl;
+    cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
 
     cudaFree(d_graph);
     cudaFree(d_adjList);
     cudaFree(d_rho);
     cudaFree(d_C);
 
-    free(rho);
     if(!checkValidColoring(graph, adjList, C, n))
     {
         cout << "Assert failed" << endl;
