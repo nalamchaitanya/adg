@@ -46,21 +46,22 @@ const long scale_1 = 1e16,scale_2 = 1e15;
 //     return result;
 // }
 
-bool checkValidColoring(int* graph, int* adjList, int* C, int n)
+int checkValidColoring(int* graph, int* adjList, int* C, int n)
 {
-    cout << "coloring" << endl;
+    // cout << "coloring" << endl;
+    int maxcolor = 0;
     for(int i=1;i<=n;i++)
     {
-        cout << i << " " << C[i] << endl;
+        maxcolor = max(maxcolor, C[i]);
         for(int j=graph[i];j<graph[i+1];j++)
         {
             if(C[adjList[j]] == C[i])
             {
-                return false;
+                return 0;
             }
         }
     }
-    return true;
+    return maxcolor;
 }
 
 void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int &D)
@@ -224,7 +225,7 @@ long getDegSum(int n, int* degree)
     {
         cout << "GPU: arr1 to sum " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
     }
-    cout << "Sum : " << sum << endl;
+    // cout << "Sum : " << sum << endl;
     cudaFree(arr1);
     cudaFree(arr2);
     return sum;
@@ -407,7 +408,7 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
     ordering[0] = 0;
     while(ordering[0]<n)
     {
-        cout <<"Finished ordering" << ordering[0] << endl;
+        // cout <<"Finished ordering" << ordering[0] << endl;
         double *avg = new double;
 
         updateDegree<<<gridDim,blockDim>>>(d_ordering, d_degree, temp_d_degree, n);
@@ -420,7 +421,7 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
         {
             cout << "GPU: d_avg to avg " << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
-        cout <<"avg degree is "<<*avg << endl;
+        // cout <<"avg degree is "<<*avg << endl;
         getADG<<<gridDim, blockDim>>>(n, eps, d_avg, d_ordering, d_degree, d_state, num_partition++, temp_d_degree, d_graph, d_adjList);
         code = cudaMemcpy(ordering,d_ordering,sizeof(long)*(n+1),cudaMemcpyDeviceToHost); // copy from device to host
         if (code != cudaSuccess)
@@ -433,7 +434,7 @@ long* getRhoAdg(int* d_graph, int* d_adjList, int strategy, int n, double eps, c
     cudaFree(temp_d_degree);
     cudaFree(d_avg);
     cudaFree(d_ordering);
-    cout <<"Finished ordering " << ordering[0] << endl;
+    // cout <<"Finished ordering " << ordering[0] << endl;
     return ordering;
 }
 
@@ -449,7 +450,7 @@ int main(int argc, char** argv)
     int *adjList = NULL;
     int *graph = NULL;
     parseInput(argv[1], n , m, graph, adjList, D);
-    cout << "Parse input D " << D << " n " << n << " m " << m << endl;
+    // cout << "Parse input D " << D << " n " << n << " m " << m << endl;
     int *d_graph, *d_adjList;
     
     if(cudaMalloc(&d_graph,sizeof(int)*(n+2))!=cudaSuccess)
@@ -475,12 +476,17 @@ int main(int argc, char** argv)
     curandState *d_state;
     cudaMalloc(&d_state, blockDim.x * gridDim.x * sizeof(curandState));
     setup_kernel<<<gridDim,blockDim>>>(d_state);
-    cout <<"finished random number generation" << endl;
+    // cout <<"finished random number generation" << endl;
 
-    int iter = 0;
+    //Start cuda timer after init
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+
     const double eps = 0.5;
 
-    cout <<"calling getrhoadg" << endl;
+    // cout <<"calling getrhoadg" << endl;
     long *rho = getRhoAdg(d_graph, d_adjList, 0, n, eps, d_state);
 
     //print ADG ordering
@@ -495,7 +501,7 @@ int main(int argc, char** argv)
         }
         mymap[rho[i]]++;
     }
-    cout <<"Number of collisions" << flag << endl;
+    cout <<"Number of collisions: " << flag  << "/" << n << endl;
 
     long* d_rho;
     if(cudaMalloc(&d_rho,sizeof(long)*(n+1))!=cudaSuccess)
@@ -521,11 +527,13 @@ int main(int argc, char** argv)
     }
 
     // C[0] = 0;
+    int iter = 0;
     while(C[0]< n)
     {
         // We need not run again for all vertices
         // Run only for uncolored vertices VERY IMPORTANT
-        cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
+        // cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
+        iter++;
         jpadg<<<gridDim, blockDim>>>(d_graph, d_adjList, d_rho, d_C, D, n);
         auto code = cudaMemcpy(C,d_C,sizeof(int)*(n+1),cudaMemcpyDeviceToHost);
         if (code != cudaSuccess)
@@ -533,17 +541,27 @@ int main(int argc, char** argv)
             cout << "GPU:" << cudaGetErrorName(code) << " " <<  cudaGetErrorString(code) << " " << endl;
         }
     }
-    cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
+    // cout << "Running iteration " << iter++ << " colored : " << C[0] << "/" << n << endl;
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+
+    int maxcolor = checkValidColoring(graph, adjList, C, n);
+    if(maxcolor == 0)
+    {
+        cout << "coloring wrong" << endl;
+    }
+    cout << "n: " << n << " m: " << m << " D: " << D << " maxColor: " << maxcolor << " time(ms): " << milliseconds << " iter: " << iter << endl;
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     cudaFree(d_graph);
     cudaFree(d_adjList);
     cudaFree(d_rho);
     cudaFree(d_C);
 
-    if(!checkValidColoring(graph, adjList, C, n))
-    {
-        cout << "Assert failed" << endl;
-    }
     free(graph);
     free(adjList);
     free(C);
