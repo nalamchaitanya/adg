@@ -10,6 +10,7 @@
 #include<cstdio>
 #include<map>
 #include<queue>
+#include<cstdlib>
 using namespace std;
 using std::min;
 using std::max;
@@ -46,7 +47,7 @@ const long scale_1 = 1e9,scale_2 = 1e10;
 //     return result;
 // }
 
-int checkValidColoring(int* graph, int* adjList, int* C, int n)
+bool checkValidColoring(int* graph, int* adjList, int* C, int n)
 {
     // cout << "coloring" << endl;
     int maxcolor = 0;
@@ -66,7 +67,7 @@ int checkValidColoring(int* graph, int* adjList, int* C, int n)
 }
 
 int bfs(int src, int n, int m, int* graph, int*adjList, int* cluster, int maxnodes, int num_cluster = 1)
-{
+{ 
     queue<int> q;
     //vector<bool> vis(n + 1, false);
     q.push(src);
@@ -91,31 +92,150 @@ int bfs(int src, int n, int m, int* graph, int*adjList, int* cluster, int maxnod
 
 
     }
+
     return num_cluster;
 
 
 }
-int* cluster_graph(int n, int m, int* graph, int* adjList, int D)
+int* cluster_graph(int n, int m, int* graph, int* adjList)
 {
     int* cluster = new int[n + 1];
-    memset(cluster, 0, n*sizeof(int));
+    memset(cluster, 0, (n + 1)*sizeof(int));
     int num_cluster = 1;
+    //cout <<"hi" << endl;
     for(int i = 1; i <= n; i ++)
     {
+        //cout <<"checking i "<< i << endl;
         if(!cluster[i])
-            num_cluster = bfs(i, n, m, graph, adjList, cluster, 1024, num_cluster);
+            num_cluster = bfs(i, n, m, graph, adjList, cluster, 1020, num_cluster);
     }
 
     return cluster;
 
 }
 
-void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int &D)
+
+
+int* parseInput2(int n, int m, int* graph, int* adjList, int* perm)
+{
+    int* tempadjList = new int[2*m + 5];
+    int* invperm = new int[n+ 5];
+    int* tgraph = new int[n + 5];
+    for(int i = 1; i <= n; i ++)
+    {
+        invperm[perm[i]] = i;
+    }
+    //cout <<"Printing permutation" << endl;
+    for(int i =1 ; i <= n ; i ++)
+    {
+        cout << perm[i] << endl;
+    }
+    int ctr = 0;
+    //cout <<"no seg fault here "<< endl;
+    for(int i = 1; i <= n; i ++)
+    {
+        tgraph[i] = ctr;
+      //  cout <<"in  loop " << invperm[i] << endl;
+        //cout <<"val " << graph[invperm[i]] << endl;
+        for(int j = graph[invperm[i]]; j < graph[invperm[i] + 1]; j ++)
+        {
+            tempadjList[ctr++] = perm[adjList[j]];
+        }
+    }
+   // cout <<"no seg fault here too" << endl;
+    tgraph[n + 1] = ctr;
+    for(int j = 0; j < 2*m; j ++)
+    {
+        adjList[j] = tempadjList[j];
+    }
+    for(int i = 1; i <= n; i ++)
+    {
+        graph[i] = tgraph[i];
+    }
+    return invperm;
+
+} 
+
+int genRandom(int n, double p, int* &graph, int* &adjList, int &D)
+{
+    int maxval = 1000000;
+    //int ctr = 0;
+    int m = 0;
+
+    graph = new int[n + 2];
+
+    vector<int> *g = new vector<int>[n + 1];
+
+
+
+
+
+    for(int i = 1; i <= n; i ++)
+    {
+        for(int j = i + 1; j <= n; j ++)
+        {
+            int u = rand() % maxval;
+            if((double)u < p*maxval)
+            {
+                g[i].push_back(j);
+                g[j].push_back(i);
+                m++;
+
+            }
+
+        }
+    }
+    adjList = new int[2*m];
+    graph[0] = m;
+
+
+    D = 0;
+    int ctr = 0;
+    //cout <<"hey there" << endl;
+    for(int i = 1; i <=n; i ++)
+    {
+        graph[i] = ctr;
+        for(auto &x: g[i])
+        {
+            adjList[ctr++] = x;
+        }
+        D = max(D, (int)g[i].size());
+    }
+    D++;
+    graph[n + 1] = ctr;
+
+
+
+    return m;
+
+
+
+    
+}
+
+void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int &D, int flag = 0)
 {
     // TODO aditya: malloc the graph here after finding the number of edges and length of array needed
     // Determine the number of colors D needed
+
+
+
+
+
+
+
+
     fstream f;
     f.open(inputFile, ios::in);
+
+    if(flag)
+    {
+        double p;
+        f >> n >> p;
+        m = genRandom(n, p, graph, adjList, D);
+        return;
+
+    }
     f >> n >> m;
 
     graph = new int[n + 2];
@@ -155,6 +275,45 @@ void parseInput(char* inputFile, int &n, int &m, int* &graph, int* &adjList, int
     // cout << endl;
     return;
 }
+
+// void parseInput_random(vector<int> &g, int n, int m, int* &graph, int* &adjList, int &D)
+// {
+//     // TODO aditya: malloc the graph here after finding the number of edges and length of array needed
+//     // Determine the number of colors D needed
+
+
+//     graph = new int[n + 2];
+//     adjList = new int[2*m];
+//     graph[0] = m;
+//     D = 0;
+//     int ctr = 0;
+//     //cout <<"hey there" << endl;
+//     for(int i = 1; i <=n; i ++)
+//     {
+//         graph[i] = ctr;
+//         for(auto &x: g[i])
+//         {
+//             adjList[ctr++] = x;
+//         }
+//         D = max(D, (int)g[i].size());
+//     }
+//     D++;
+//     graph[n + 1] = ctr;
+//    // cout <<"hey there" << endl;
+//     f.close();
+//     // for(int i = 0; i <2*m ; i++)
+//     // {
+//     //     cout << adjList[i] <<" ";
+//     // }
+//     // cout << endl;
+//     // for(int i = 0; i < n+2; i ++)
+//     // {
+//     //     cout << graph[i] <<" ";
+//     // }
+//     // cout << endl;
+//     return;
+// }
+
 
 __global__ void setup_kernel(curandState *state){
 
@@ -495,8 +654,12 @@ int main(int argc, char** argv)
     int n, m, D;
     int *adjList = NULL;
     int *graph = NULL;
-    parseInput(argv[1], n , m, graph, adjList, D);
+    parseInput(argv[1], n , m, graph, adjList, D, 1);
     // cout << "Parse input D " << D << " n " << n << " m " << m << endl;
+    int* perm = cluster_graph(n, m, graph, adjList);
+    //cout <<"Finished bfs" << endl;
+    int* invperm = parseInput2(n, m, graph, adjList, perm);
+    
     int *d_graph, *d_adjList;
     
     if(cudaMalloc(&d_graph,sizeof(int)*(n+2))!=cudaSuccess)
