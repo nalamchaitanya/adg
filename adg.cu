@@ -251,21 +251,11 @@ __device__ int getColor(int* graph, int* adjList, long* rho, int* C, int v, int 
 __global__ void jpadg(int* graph, int* adjList, long* rho, int* C, int D, int n)
 {
     int u = (blockDim.x * blockIdx.x)+threadIdx.x+1;
-    if(u> n || u<1)
+    if(u> n || u<1 || C[u]!=0)
     {
         return;
     }
-    int minC = 0;
-    // A very important change to make while loop to if. We just give one chance if doesn't get color
-    // give another chance again later, no point in giving a chance again immediately
-    if(C[u] == 0)
-    {
-        minC = getColor(graph, adjList, rho, C, u, D);
-        if(minC != 0)
-        {
-            C[u] = minC;
-        }
-    }
+    C[u] = getColor(graph, adjList, rho, C, u, D);
     return;
 }
 
@@ -398,9 +388,6 @@ int main(int argc, char** argv)
         cout << "No input" << endl;
         return 0;
     }
-
-
-    // TODO by aditya
     int n, m, D;
     int *adjList = NULL; //This is the adjacency list
     int *graph = NULL;
@@ -481,7 +468,6 @@ int main(int argc, char** argv)
         {
             rho[i]++;
             flag++;
-
         }
         mymap[rho[i]]++;
     }
@@ -517,9 +503,12 @@ int main(int argc, char** argv)
     cudaFree(d_C);
 
     free(rho);
-    assert(checkValidColoring(graph, adjList, C, n));
     free(graph);
     free(adjList);
     free(C);
+    if(!checkValidColoring(graph, adjList, C, n))
+    {
+        cout << "Assert failed" << endl;
+    }
     return 0;
 }
