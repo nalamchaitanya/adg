@@ -14,13 +14,15 @@
 #     a = t.split(" ");
 #     print(str(int(a[0])+1)+" "+str(int(a[1])+1));
 
-file1 = open('github.dat', 'r')
+file1 = open('facebook2.csv', 'r')
 Lines = file1.readlines()
 
 m = len(Lines);
 n = 0;
 for t in Lines:
     a = t.split(",");
+    if(int(a[0])  == int(a[1])):
+        m = m-1;
     n = max(n, max(int(a[0]), int(a[1])));
 
 n = n+1;
@@ -28,4 +30,5 @@ print(str(n)+" "+str(m));
 
 for t in Lines:
     a = t.split(",");
-    print(str(int(a[0])+1)+" "+str(int(a[1])+1));
+    if(int(a[0])  != int(a[1])):
+        print(str(int(a[0])+1)+" "+str(int(a[1])+1));
